@@ -1,6 +1,6 @@
 # Vkontankte Music Loader
 
-## Downloads your playlist
+## Downloads your vkontakte playlist
 
 ### Limitations:
 * 2000 songs max limit
