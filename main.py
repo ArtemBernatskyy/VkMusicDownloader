@@ -194,7 +194,7 @@ class Parser:
             res['list'])
         )
 
-    def _load_song(self, ids=[]):
+    def _load_song(self, ids):
         '''
         loads individual song's details (download url)
         also we can speed up this
@@ -205,7 +205,7 @@ class Parser:
             data={
                 'al': 1,
                 'act': 'reload_audio',
-                'ids': '344585549_' + str(ids)
+                'ids': '{}_{}'.format(self.vk_id, ids)
             },
             headers={
                 'Content-Type':
