@@ -10,7 +10,7 @@ from bs4 import BeautifulSoup as bs
 class Decipher:
     '''
         This class was reverse engineered from vkontakte js code
-        that's why so many stranges logic and method names )
+        that's why so many strange logic and method names )
     '''
 
     def __init__(self, vk_id):
