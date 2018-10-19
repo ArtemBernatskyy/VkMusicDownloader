@@ -32,6 +32,7 @@ yarn-error.log*
 
 # Directories #
 logs/
+data/
 .idea/
 .vagrant/
 
@@ -40,6 +41,7 @@ local_settings.py
 vagrant_ansible_inventory_default
 db.sqlite3
 nohup.out
+config.py
 
 
 # OS generated files #

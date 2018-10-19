@@ -1,17 +1,21 @@
-import json
 import os
+import json
 import time
 import random
 
 import requests
 from bs4 import BeautifulSoup as bs
 
+import config
+
 
 class Decipher:
-    '''
-        This class was reverse engineered from vkontakte js code
-        that's why so many strange logic and method names )
-    '''
+    """Class for decrypting song urls
+
+    Note:
+        This class was reverse engineered from vk.com js code
+        that's why so many strange logic and method names
+    """
 
     def __init__(self, vk_id):
         self.vk_id = vk_id
@@ -118,52 +122,75 @@ class Decipher:
 
 
 class Parser:
-    '''
-    loading songs from vkontakte
-    Current limitations: skipping first song, max playlist is 2k
-    '''
+    """Class for parsing songs from vk.com
+
+    Note:
+        Current limitations: downloading 100 songs max
+
+    Attributes:
+        vk_id (int): your vk.com id
+        email (str): email or phone for vk.com
+        password (str): password for vk.com
+        offset (int): number fo songs to download form top (max 100)
+
+    Todo:
+        write granular exceptions in self.run
+    """
+
     def __init__(self, vk_id, email, password, offset=0):
         self.vk_id = vk_id
         self.email = email
-        # number of song to download
         self.offset = offset
         self.password = password
         self.headers = {
-            "Referer":
-            "https://m.vk.com/login?role=fast&to=&s=1&m=1&email={}".format(
-                self.email),
-            'User-Agent':
-            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.12; rv:50.0) Gecko/20100101 Firefox/50.0'
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.12; rv:50.0) Gecko/20100101 Firefox/50.0',
         }
         self.payload = {
-            'email': '{}'.format(self.email),
-            'pass': self.password
+            'email': f'{self.email}',
+            'pass': self.password,
         }
         self.s = requests.session()
+        self.s.headers.update(self.headers)
         self.decipher = Decipher(vk_id=self.vk_id)
 
-    def login(self):
-        '''
-        login to vkontakte
-        '''
-        page = self.s.get('https://m.vk.com/login')
-        soup = bs(page.content, 'lxml')
-        url = soup.find('form')['action']
-        self.s.post(url, data=self.payload, headers=self.headers)
+    def __repr__(self):
+        return f"Parser({self.vk_id}, {self.email}, {self.password}, offset={self.offset})"
 
-    def _prepare(self, data):
-        '''cleaning json after vkontakte'''
-        r = data.text.split('<!>')[5]
-        json_data = json.loads(data.text.split('<!>')[5][7:])
+    def login(self):
+        """Login to vk.com"""
+        page = self.s.get('https://m.vk.com/login')
+        soup = bs(page.text, 'lxml')
+        url = soup.find('form')['action']
+        self.s.post(
+            url,
+            data=self.payload,
+            headers={
+                'Referer': f'https://m.vk.com/login?role=fast&to=&s=1&m=1&email={self.email}',
+            },
+        )
+
+    def _prepare(self, raw_text):
+        """Cleaning json after vkontakte API
+
+        VK.com returns json with html so we need to clean up html before parsing json
+
+        Args:
+            raw_text (str): text returned after request to vk.com API
+
+        Returns:
+            json: cleaned data in json format
+        """
+        # r = data.text.split('<!>')[5]
+        json_data = json.loads(raw_text.split('<!>')[5][7:])
         return json_data
 
     def _load_playlist(self):
-        '''
-        loading first 2k playlist songs
-        we also skipping first song :(
-        here we can't get songs' download urls
-        thus we are using self._load_song to get url
-        '''
+        """Loads songs from user's playlist
+
+        Note:
+            max 100 songs
+            when setting offset to 1 it won't show a first song BUT will show much larger results (100 vs 2000)
+        """
         return self.s.post(
             'https://vk.com/al_audio.php',
             data={
@@ -172,90 +199,110 @@ class Parser:
                 'owner_id': self.vk_id,
                 'type': 'playlist',
                 'playlist_id': '-1',
-                'offset': 1
+                'offset': 0
             },
             headers={
-                'Content-Type':
-                'application/x-www-form-urlencoded',
-                'User-Agent':
-                'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.12; rv:50.0) Gecko/20100101 Firefox/50.0'
-            })
-
-    def _parse_json_to_dict(self, res):
-        '''
-        parsing list to dict
-        '''
-        return list(map(lambda x: {
-            'track_id': x[0],
-            'user_id': x[1],
-            'src': x[2],
-            'title': x[3],
-            'author': x[4]},
-            res['list'])
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
         )
 
-    def _load_song(self, ids):
-        '''
-        loads individual song's details (download url)
-        also we can speed up this
-        and load multiple songs at the same time
-        '''
+    def _unmask_id(self, raw_song):
+        """Unmasks song ID to vk.com format
+
+        Args:
+            raw_song (dict): song dict obtained from self._load_playlist
+
+        Returns:
+            str: unmasked_id which is unmasked string ready for vk.com API usage
+        """
+        track_id_strange = raw_song[13].split('/')[2]
+        track_id_strange2 = raw_song[13].split('//')[1].split('/')[0]
+        if track_id_strange == track_id_strange2:
+            track_id_strange2 = raw_song[13].split('//')[2]
+        unmasked_id = f"{self.vk_id}_{raw_song[0]}_{track_id_strange}_{track_id_strange2}"
+        return unmasked_id
+
+    def _parse_json_to_list(self, json_data):
+        """Parsing json data to list of dictionaries
+
+        Args:
+            json_data (json): cleaned json data returned from self._prepare
+
+        Returns:
+            list: result_list which is list of dictionaries
+        """
+        result_list = []
+        for raw_song in json_data['list']:
+            song = {}
+            song['track_id'] = raw_song[0]
+            song['user_id'] = raw_song[1]
+            song['title'] = raw_song[3]
+            song['author'] = raw_song[4]
+            song['unmasked_id'] = self._unmask_id(raw_song)
+            result_list.append(song)
+        return result_list
+
+    def _load_song(self, unmasked_id):
+        """Loads individual song details
+
+        We need this in order to obtain crypted urls of songs,
+        which later we will unmask via self.decipher.unmask_url
+
+        Note:
+            you can speed up via providing multiple ids separated by comma
+
+        Args:
+            unmasked_id (str): song ID which we obtained from self._unmask_id
+        """
         return self.s.post(
             'https://vk.com/al_audio.php',
             data={
                 'al': 1,
                 'act': 'reload_audio',
-                'ids': '{}_{}'.format(self.vk_id, ids)
+                'ids': unmasked_id,
             },
             headers={
-                'Content-Type':
-                'application/x-www-form-urlencoded',
-                'User-Agent':
-                'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.12; rv:50.0) Gecko/20100101 Firefox/50.0'
-            })
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+        )
 
     def run(self):
-        # loading last 2k songs (without)
         playlist_json = self._load_playlist()
-        # fixing broken json structure
-        playlist_json_cleaned = self._prepare(playlist_json)
-        # creating list of dictionaries here
-        playlist = self._parse_json_to_dict(playlist_json_cleaned)
+        playlist_json_cleaned = self._prepare(playlist_json.text)
+        playlist = self._parse_json_to_list(playlist_json_cleaned)
         # reversing playlist in order to load songs in uploaded order
         reversed_playlist = list(reversed(playlist[:self.offset]))
 
         count = 1
         for song in reversed_playlist:
-            # rate limiting fucking
+            # rate limiting hacking
             time.sleep(random.randint(10, 20) / 10)
-            print("{count} from {length} | {title}".format(
-                count=count, length=len(reversed_playlist), title=song['title']))
+            print(f"{count} from {len(reversed_playlist)} | {song['title']}")
             count += 1
-            
+
             while True:
                 try:
-                    song_detail = self._load_song(ids=song['track_id'])
-                    song_cleaned = self._prepare(song_detail)
+                    song_detail = self._load_song(unmasked_id=song['unmasked_id'])
+                    song_cleaned = self._prepare(song_detail.text)
                     break
-                except:
-                    # in case when vkontakte blocks us we are enabling new fucking mode
+                except Exception:
+                    # in case when vkontakte blocks us we are waiting
                     print('waiting for vkontakte to unblock us :(')
                     time.sleep(random.randint(3, 7))
             try:
                 song_crypted_url = song_cleaned[0][2]
                 unmasked_url = self.decipher.unmask_url(song_crypted_url)
                 # loading song via curl
-                os.system("curl {} -o 'data/{} - {}.mp3'".format(
-                    unmasked_url, song['author'], song['title']))
+                os.system(f"curl {unmasked_url} -o 'data/{song['author']} - {song['title']}.mp3'")
             except IndexError:
-                print('song {} is banned :('.format(song['title']))
+                print(f"song {song['title']} is banned :(")
 
 
-if __name__=='__main__':
-    parser = Parser(
-        vk_id=00000000,         # your id
-        email="+380902192121",  # your phone
-        password="securepass",  # vkontakte password
-        offset=152)             # number of songs to load
-    parser.login()
-    parser.run()
+parser = Parser(
+    vk_id=config.VK_ID,
+    email=config.EMAIL,
+    password=config.PASSWORD,
+    offset=config.OFFSET,
+)
+parser.login()
+parser.run()
