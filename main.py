@@ -199,7 +199,7 @@ class Parser:
                 'owner_id': self.vk_id,
                 'type': 'playlist',
                 'playlist_id': '-1',
-                'offset': 0
+                'offset': 0,
             },
             headers={
                 'Content-Type': 'application/x-www-form-urlencoded',
