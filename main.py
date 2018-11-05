@@ -2,6 +2,7 @@ import os
 import json
 import time
 import random
+import string
 
 import requests
 from bs4 import BeautifulSoup as bs
@@ -292,8 +293,11 @@ class Parser:
             try:
                 song_crypted_url = song_cleaned[0][2]
                 unmasked_url = self.decipher.unmask_url(song_crypted_url)
+                valid_chars = "-_.() %s%s" % (string.ascii_letters, string.digits)
+                safe_author = ''.join(c for c in song['author'] if c in valid_chars)
+                safe_title = ''.join(c for c in song['title'] if c in valid_chars)
                 # loading song via curl
-                os.system(f"curl {unmasked_url} -o 'data/{song['author']} - {song['title']}.mp3'")
+                os.system(f"curl {unmasked_url} -o 'data/{safe_author} - {safe_title}.mp3'")
             except IndexError:
                 print(f"song {song['title']} is banned :(")
 
