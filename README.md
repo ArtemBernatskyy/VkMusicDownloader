@@ -1,3 +1,5 @@
+### UPD vk.com changed something in their API, I will discontinue support for this script
+
 # Vkontankte Music Loader
 
 > Downloads your vkontakte playlist
